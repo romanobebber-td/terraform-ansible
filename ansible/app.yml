@@ -1,0 +1,72 @@
+---
+- name: Configurar Servidor da Aplicação (Flask)
+  hosts: app
+  become: yes
+  tasks:
+    - name: Instalar Python e dependências
+      apt:
+        name: 
+          - python3
+          - python3-pip
+          - python3-flask
+          - python3-venv
+          - python3-psycopg2
+        state: present
+        update_cache: yes
+
+    - name: Criar diretório da aplicação
+      file:
+        path: /opt/minha-app
+        state: directory
+        mode: '0755'
+
+    - name: Copiar o código da aplicação (app.py)
+      copy:
+        dest: /opt/minha-app/app.py
+        content: |
+          from flask import Flask
+          import psycopg2
+          import os
+
+          app = Flask(__name__)
+
+          @app.route('/')
+          def index():
+              try:
+                  conn = psycopg2.connect(
+                      dbname="appdb",
+                      user="appuser",
+                      password="senha123",
+                      host="10.10.20.176" # <-- IP DA VM DO BANCO
+                  )
+                  conn.close()
+                  return "App rodando e conectada ao Banco de Dados com sucesso!"
+              except Exception as e:
+                  return f"App rodando, mas sem conexao com o banco: {e}"
+
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=8080)
+
+    - name: Criar arquivo de serviço do Systemd
+      copy:
+        dest: /etc/systemd/system/minha-app.service
+        content: |
+          [Unit]
+          Description=Minha Aplicacao Flask
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          WorkingDirectory=/opt/minha-app
+          ExecStart=/usr/bin/python3 /opt/minha-app/app.py
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Iniciar e habilitar o serviço da aplicação
+      systemd:
+        name: minha-app
+        state: started
+        enabled: yes
+        daemon_reload: yes

@@ -1,0 +1,66 @@
+---
+- name: Configurar Servidor de Banco de Dados (PostgreSQL)
+  hosts: db
+  become: yes
+  tasks:
+
+    - name: Instalar o PostgreSQL e dependências do Ansible
+      apt:
+        name: 
+          - postgresql
+          - acl
+          - python3-psycopg2
+        state: present
+        update_cache: yes
+
+    - name: Garantir que o serviço do PostgreSQL está rodando
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+
+
+    - name: Permitir que o PostgreSQL escute em todas as interfaces
+      lineinfile:
+        path: /etc/postgresql/16/main/postgresql.conf
+        regexp: "^#?listen_addresses"
+        line: "listen_addresses = '*'"
+      notify: restart postgresql
+
+    - name: Permitir conexões da rede da aplicação (pg_hba.conf)
+      lineinfile:
+        path: /etc/postgresql/16/main/pg_hba.conf
+        line: "host    all             all             10.10.20.0/24           md5"
+        insertafter: EOF
+      notify: restart postgresql
+
+
+
+    - name: Criar banco de dados da aplicação
+      postgresql_db:
+        name: appdb
+        state: present
+      become_user: postgres
+
+    - name: Criar usuário do banco de dados
+      postgresql_user:
+        db: appdb
+        name: appuser
+        password: senha123
+        state: present
+      become_user: postgres
+
+    - name: Conceder permissões ao usuário no banco
+      postgresql_privs:
+        db: appdb
+        state: present
+        privs: ALL
+        type: database
+        roles: appuser
+      become_user: postgres
+
+  handlers:
+    - name: restart postgresql
+      service:
+        name: postgresql
+        state: restarted

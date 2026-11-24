@@ -1,0 +1,40 @@
+---
+- name: Configurar Servidor Nginx (Proxy Reverso)
+  hosts: nginx
+  become: yes
+  tasks:
+    - name: Instalar o Nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Configurar o proxy reverso (Nginx -> App)
+      copy:
+        dest: /etc/nginx/sites-available/default
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              root /var/www/html;
+              index index.html index.htm index.nginx-debian.html;
+              server_name _;
+              location / {
+                  proxy_pass http://10.10.20.50:8080; # <-- IP DA VM DA APP
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+          }
+      notify: restart nginx
+
+    - name: Garantir que o Nginx está rodando
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
